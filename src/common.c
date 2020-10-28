@@ -79,7 +79,9 @@ int get_cmd(const char *str)
 	else if (!strcmp(str, "put")) return CMD_PUT;
 	else if (!strcmp(str, "mget")) return CMD_MGET;
 	else if (!strcmp(str, "mput")) return CMD_MPUT;
-	else if (!strcmp(str, "close")) return CMD_CLOSE;
+	else if (!strcmp(str, "close") || 
+			!strcmp(str, "quit") ||
+			!strcmp(str, "exit")) return CMD_CLOSE;
 	return CMD_NONE;
 }
 
@@ -156,6 +158,16 @@ int recv_int(int sock)
 	}
 	memcpy(&data, (buf + OFFSET_DATA), sizeof(int));
 	return data;
+}
+
+/* char형 Data를 받는다. */
+char recv_char(int sock)
+{
+	char buf[BUF_SIZE] = {0, };
+	if (recv_data(sock, buf) == -1) {
+		return -1;
+	}
+	return buf[OFFSET_DATA];
 }
 
 /* 문자열 Data를 받는다. */
@@ -339,6 +351,7 @@ int file_download(int sock, char *path)
 	}
 	puts("... 정상 수신 신호 전송 완료");
 
+	puts("... 파일 다운로드 시작");
 	// 파일 다운로드 시작
 	while (1) {
 		if (recv_data(sock, buf) == -1) {
@@ -348,6 +361,7 @@ int file_download(int sock, char *path)
 		data_size = get_packet_size(buf);
 
 		if (write(fd, (buf + OFFSET_DATA), data_size) < 0) {
+			err_print("파일 쓰기 작업 중 오류");
 			return -1;
 		}
 
@@ -356,6 +370,7 @@ int file_download(int sock, char *path)
 			break;
 		}
 	}
+	puts("... 파일 다운로드 완료");
 
 	// 전송 완료 신호 수신
 	puts("... 파일 전송 완료 신호 수신");
@@ -541,7 +556,7 @@ int open_connection(const char *host, int port)
 /* 메시지를 stderr에 출력한다. */
 int err_print(const char *message)
 {
-	fputs("ERROR : ", stderr);
+	fputs("\033[1;31mERROR : \033[0m", stderr);
 	fputs(message, stderr);
 	fputs("\n", stdout);
 	return 0;

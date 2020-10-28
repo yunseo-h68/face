@@ -17,6 +17,7 @@ int main(int argc, char* argv[])
 	char c = 0;
 	char buf[BUF_DATA_SIZE] = {0,};
 	char *work_path = (char*)malloc(2);
+	size_t data_size = 0;
 	struct request_command* req_cmd = NULL;
 	strcpy(work_path, "~");
 
@@ -30,14 +31,19 @@ int main(int argc, char* argv[])
 	err_handling(sock, SOCKET_ERR, "socket() error");
 	err_handling(sock, CONNECT_ERR, "connect() error");
 
+	printf("Welcome to Face\nConnected to %s:%s\n\n", argv[1], argv[2]);
+
 	while (1) {
+		// 서버 정보 출력
+		printf("\033[1;32m%s:%s:", argv[1], argv[2]);
+
 		// 현재 작업 경로를 출력한다.
 		if (work_path != NULL) {
-			fputs(work_path, stdout);
+			printf("\033[1;34m%s", work_path);
 		}
 
 		// 명령을 입력 받는다.
-		fputs("$ ", stdout);
+		fputs("$\033[0m ", stdout);
 		memset(buf, 0, BUF_DATA_SIZE);
 		for (i = 0; (c = getchar()) != '\n' && i < (int)BUF_DATA_SIZE; i++) {
 			buf[i] = c;
@@ -48,7 +54,7 @@ int main(int argc, char* argv[])
 		// 명령을 전송한다.
 		req_cmd = send_command(sock, buf);
 		if (req_cmd->cmd == SOCK_CLOSED) {
-			puts("\nClosed");
+			puts("\n\033[0mClosed");
 			exit(0);
 		} else if (req_cmd->cmd == COMMAND_NOT_FOUND) {
 			err_print("Command not found");
@@ -97,8 +103,50 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case CMD_MGET:
+				for (i = 0; i < req_cmd->argc; i++) {
+					c = getchar();
+					rewind(stdin);
+					if (c == '\n') {
+						c = 'y';
+					}
+					if (c != 'y' && c != 'n') {
+						fputs("y 또는 n를 입력해주세요.\n", stdout);
+						i--;
+						continue;
+					}
+					data_size = sizeof(c);
+					if (send_data(sock, data_size, &c, STAT_OK) != SEND_OK) {
+						SAFE_FREE(work_path);
+						err_panic("파일 다운로드 여부를 전송하는 데 실패함");
+					}
+					if (c == 'y') {
+						printf("%s를 다운로드합니다...\n", req_cmd->argv[i]);
+						file_download(sock, "./");
+					}
+				}
 				break;
 			case CMD_MPUT:
+				for (i = 0; i < req_cmd->argc; i++) {
+					c = getchar();
+					rewind(stdin);
+					if (c == '\n') {
+						c = 'y';
+					}
+					if (c != 'y' && c != 'n') {
+						fputs("y 또는 n를 입력해주세요.\n", stdout);
+						i--;
+						continue;
+					}
+					data_size = sizeof(c);
+					if (send_data(sock, data_size, &c, STAT_OK) != SEND_OK) {
+						SAFE_FREE(work_path);
+						err_panic("파일 업로드 여부를 전송하는 데 실패함");
+					}
+					if (c == 'y') {
+						printf("%s를 업로드합니다...\n", req_cmd->argv[i]);
+						file_upload(sock, req_cmd->argv[i]);
+					}
+				}
 				break;
 			default:
 				err_panic("Not reachable");

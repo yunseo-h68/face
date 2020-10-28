@@ -54,10 +54,13 @@ const char* cmd_to_str(int cmd);
 
 int send_data(int sock, size_t size, void *data, int status);
 int recv_data(int sock, char *buf);
+
 off_t recv_off_t(int sock);
 int recv_int(int sock);
-char* recv_str(int sock);
+char recv_char(int sock);
 char recv_stat(int sock);
+char* recv_str(int sock);
+
 char get_packet_stat(char *packet);
 size_t get_packet_size(char *packet);
 

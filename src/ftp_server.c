@@ -44,7 +44,7 @@ int main(int argc, char* argv[])
 	clnt_sock = accept(serv_sock, (struct sockaddr*) &clnt_addr, &clnt_addr_size);
 	err_handling(clnt_sock, -1, "accept() error");
 
-	fputs("Connected to client\n", stdout);
+	fputs("Connected to client\n\n", stdout);
 
 	while (1) {
 		// 명령 수신
@@ -52,13 +52,13 @@ int main(int argc, char* argv[])
 		if (req_cmd == NULL) {
 			err_panic("recv_command() error");
 		} else if (req_cmd->cmd == CMD_CLOSE) {
-			fputs("Disconnected from client\n", stdout);
+			fputs("\nDisconnected from client\n", stdout);
 			close(clnt_sock);
 			close(serv_sock);
 			break;
 		}
 		printf("Request : %s(%d)\n", cmd_to_str(req_cmd->cmd), req_cmd->cmd);
-		printf("Args(%d) : ", req_cmd->argc);
+		printf("Args(%d) : \n", req_cmd->argc);
 		for (i = 0; i < req_cmd->argc; i++) {
 			fputs(req_cmd->argv[i], stdout);
 			fputs(" ", stdout);
@@ -83,15 +83,29 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case CMD_GET:
-			case CMD_MGET:
 				for (i = 0; i < req_cmd->argc; i++) {
 					file_upload(clnt_sock, req_cmd->argv[i]);
 				}
 				break;
 			case CMD_PUT:
-			case CMD_MPUT:
 				for (i = 0; i < req_cmd->argc; i++) {
 					file_download(clnt_sock, "./");
+				}
+				break;
+			case CMD_MGET:
+				for (i = 0; i < req_cmd->argc; i++) {
+					// 파일 다운로드 여부 수신하였을 때 'y'일 때만 진행
+					if (recv_char(clnt_sock) == 'y') {
+						file_upload(clnt_sock, req_cmd->argv[i]);
+					}
+				}
+				break;
+			case CMD_MPUT:
+				for (i = 0; i < req_cmd->argc; i++) {
+					// 파일 업로드 여부 수신하였을 때 'y'일 때만 진행
+					if (recv_char(clnt_sock) == 'y') {
+						file_download(clnt_sock, "./");
+					}
 				}
 				break;
 			default:
