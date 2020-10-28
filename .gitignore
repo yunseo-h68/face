@@ -1,0 +1,5 @@
+*.o
+bin/
+client/
+server/
+src_backup*/
