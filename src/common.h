@@ -4,19 +4,21 @@
 #include <stdlib.h>
 #define SAFE_FREE(p) {if(p != NULL){free(p); p = NULL;}}
 
-#define SOCK_CLOSED        1
-#define SEND_OK            0
-#define SOCKET_ERR        -1
-#define BIND_ERR          -2
-#define LISTEN_ERR        -3
-#define CONNECT_ERR       -4
-#define SEND_ERR          -5
-#define RECV_ERR          -6
-#define COMMAND_NOT_FOUND -7
-#define ARG_SIZE_OVER     -8
-#define BUF_SIZE_OVER     -9
-#define START_ERR         -10
-#define CD_ERR            -11
+#define SOCK_CLOSED        2
+#define SEND_OK            1
+#define OK                 0
+#define ERR               -1
+#define SOCKET_ERR        -2
+#define BIND_ERR          -3
+#define LISTEN_ERR        -4
+#define CONNECT_ERR       -5
+#define SEND_ERR          -6
+#define RECV_ERR          -7
+#define COMMAND_NOT_FOUND -8
+#define ARG_SIZE_OVER     -9
+#define BUF_SIZE_OVER     -10
+#define START_ERR         -11
+#define CD_ERR            -12
 
 #define OFFSET_STAT 0
 #define OFFSET_SIZE 1

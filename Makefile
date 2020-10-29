@@ -8,11 +8,9 @@ RUN_PORT = 10005
 all: $(TARGET_SERVER) $(TARGET_CLIENT)
 
 run_server: $(TARGET_SERVER)
-	mkdir -p server
 	$^ $(RUN_PORT)
 
 run_client: $(TARGET_CLIENT)
-	mkdir -p client
 	$^ $(RUN_IP) $(RUN_PORT)
 
 $(TARGET_SERVER): src/ftp_server.o src/common.o

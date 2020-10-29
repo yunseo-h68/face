@@ -7,7 +7,7 @@
 
 int process_cmd_ls(int sock);
 int process_cmd_cd(int sock, char **work_path);
-struct request_command* send_command(int sock, const char* str);
+int send_command(int sock, struct request_command* req_cmd);
 
 int main(int argc, char* argv[])
 {
@@ -51,21 +51,30 @@ int main(int argc, char* argv[])
 		buf[i] = '\0';
 		if (strlen(buf) <= 0) continue;
 
-		// 명령을 전송한다.
-		req_cmd = send_command(sock, buf);
-		if (req_cmd->cmd == SOCK_CLOSED) {
-			puts("\n\033[0mClosed");
-			exit(0);
-		} else if (req_cmd->cmd == COMMAND_NOT_FOUND) {
+		// 문자열로 된 명령을 request_command 구조체로 변환
+		req_cmd = new_request_command(buf);
+		if (req_cmd == NULL) {
+			err_print("명령을 파싱하는 데 실패하였습니다.");
+			continue;
+		} else if (req_cmd->cmd == CMD_NONE) {
 			err_print("Command not found");
 			continue;
-		} else if(req_cmd->cmd == ARG_SIZE_OVER) {
-			sprintf(buf, "The maximum length of the argument is %ld.", BUF_DATA_SIZE);
-			err_print(buf);
-			continue;
-		}else if (req_cmd->cmd == SEND_ERR) {
-			SAFE_FREE(work_path);
-			err_panic("send_data() error");
+		}
+
+		// 명령을 전송한다.
+		err_chk = send_command(sock, req_cmd);
+		if (err_chk != OK) {
+			if (err_chk == SOCK_CLOSED) {
+				puts("\n\033[0mClosed");
+				exit(0);
+			} else if(err_chk == ARG_SIZE_OVER) {
+				sprintf(buf, "The maximum length of the argument is %ld.", BUF_DATA_SIZE);
+				err_print(buf);
+				continue;
+			}else if (err_chk == SEND_ERR) {
+				SAFE_FREE(work_path);
+				err_panic("send_data() error");
+			}
 		}
 
 		// 명령을 처리한다.
@@ -104,6 +113,7 @@ int main(int argc, char* argv[])
 				break;
 			case CMD_MGET:
 				for (i = 0; i < req_cmd->argc; i++) {
+					printf("%s를 다운받으시겠습니까?(Y or n) : ", req_cmd->argv[i]);
 					c = getchar();
 					rewind(stdin);
 					if (c == '\n') {
@@ -127,6 +137,7 @@ int main(int argc, char* argv[])
 				break;
 			case CMD_MPUT:
 				for (i = 0; i < req_cmd->argc; i++) {
+					printf("%s를 업로드하시겠습니까?(Y or n) : ", req_cmd->argv[i]);
 					c = getchar();
 					rewind(stdin);
 					if (c == '\n') {
@@ -223,73 +234,50 @@ int process_cmd_cd(int sock, char **work_path)
 	return 0;
 }
 
-struct request_command* send_command(int sock, const char* str)
+int send_command(int sock, struct request_command* req_cmd)
 {
 	int i = 0;
 	size_t data_size = 0;
-	char *cmd_str = NULL;
-	struct request_command* req_cmd = NULL;
-
-	if (str == NULL) {
-		return NULL;
-	}
-	cmd_str = (char *)malloc(strlen(str) + 1);
-	strcpy(cmd_str, str);
-
-	// 문자열로 된 명령을 request_command 구조체로 변환
-	req_cmd = new_request_command(cmd_str);
-	SAFE_FREE(cmd_str);
+	
 	if (req_cmd == NULL) {
-		return NULL;
-	}
-
-	// 존재하지 않는 명령이면 오류
-	if (req_cmd->cmd == CMD_NONE) {
-		req_cmd->cmd = COMMAND_NOT_FOUND;
-		return req_cmd;
+		return ERR;
 	}
 
 	// 명령 전송
 	data_size = sizeof(req_cmd->cmd);
 	if (send_data(sock, data_size, &(req_cmd->cmd), STAT_OK) == SEND_ERR) {
-		req_cmd->cmd = SEND_ERR;
-		return req_cmd;
+		return SEND_ERR;
 	}
 
 	// 만약 명령 코드가 CMD_CLOSE라면 소켓 종료
 	if (req_cmd->cmd == CMD_CLOSE) {
 		close(sock);
-		req_cmd->cmd = SOCK_CLOSED;
-		return req_cmd;
+		return SOCK_CLOSED;
 	}
 
 	// 인자의 개수를 전송한다.
 	data_size = sizeof(req_cmd->argc);
 	if (send_data(sock, data_size, &(req_cmd->argc), STAT_OK) == SEND_ERR) {
-		req_cmd->cmd = SEND_ERR;
-		return req_cmd;
+		return SEND_ERR;
 	}
 	
 	// 인자 전송 신호
 	if (send_data(sock, 0, NULL, STAT_START) == SEND_ERR) {
-		req_cmd->cmd = SEND_ERR;
-		return req_cmd;
+		return SEND_ERR;
 	}
 
 	// 인자들을 순서대로 전송한다.
 	for (i = 0; i < req_cmd->argc; i++) {
 		data_size = strlen(req_cmd->argv[i]) + 1;
 		if (send_data(sock, data_size, req_cmd->argv[i], STAT_DOING) == SEND_ERR) {
-			req_cmd->cmd = SEND_ERR;
-			return req_cmd;
+			return SEND_ERR;
 		}
 	}
 
 	// 인자 전송 완료 신호
 	if (send_data(sock, 0, NULL, STAT_END) == SEND_ERR) {
-		req_cmd->cmd = SEND_ERR;
-		return req_cmd;
+		return SEND_ERR;
 	}
 	
-	return req_cmd;
+	return OK;
 }

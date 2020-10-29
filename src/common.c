@@ -227,7 +227,7 @@ char* get_last_path(char* path)
 int file_upload(int sock, char *path)
 {
 	int fd = 0;
-	int len = 0;
+	ssize_t len = 0;
 	size_t data_size = 0;
 	char buf[BUF_SIZE] = {0,};
 	struct stat file_stat;
@@ -239,6 +239,11 @@ int file_upload(int sock, char *path)
 	// 파일을 연다.
 	fd = open(path, O_RDONLY);
 	if (fd == -1 || fstat(fd, &file_stat) == -1) {
+		// 만약 파일을 열어 파일 정보를 읽는 데 실패한다면
+		// 사이즈를 0으로 전송하고 종료
+		if (send_data(sock, data_size, 0, STAT_OK) == SEND_ERR) {
+			return -1;
+		}
 		return -1;
 	}
 	
@@ -256,35 +261,20 @@ int file_upload(int sock, char *path)
 		return -1;
 	}
 
-	// 파일 전송 시작 신호
-	puts("... 전송 시작 신호 전송");
-	if (send_data(sock, 0, NULL, STAT_START) == SEND_ERR) {
-		return -1;
-	}
-	puts("... 전송 시작 신호 전송 완료");
-
-	// 정상 수신 확인
-	puts("... 전송 시작 신호 수신 확인");
-	if (recv_stat(sock) != STAT_OK) {
-		puts("... 전송 시작 신호 수신 실패");
-		return -1;
-	}
-	puts("... 전송 시작 신호 수신 확인 완료");
-
-	puts("... 전송 시작");
+	puts("... Uploading file");
 	// 전송 시작
-	while ((len = read(fd, buf, BUF_DATA_SIZE)) > 0) {
-		if (len == -1 || send_data(sock, (size_t)len, buf, STAT_DOING) == SEND_ERR) {
-			return -1;
+	while ((len = read(fd, buf, BUF_SIZE)) > 0) {
+		if (send(sock, buf, len, 0) < 0) {
+			err_print("파일 전송 중 오류");
+			break;
 		}
 	}
-	puts("... 전송 완료");
 
-	// 전송 완료 신호
-	if (send_data(sock, 0, NULL, STAT_END) == SEND_ERR) {
+	// 정상 수신 여부 수신
+	if (recv_stat(sock) != STAT_OK) {
 		return -1;
 	}
-	puts("전송 완료");
+	puts("File upload complete");
 
 	// 파일을 닫는다.
 	close(fd);
@@ -295,8 +285,8 @@ int file_upload(int sock, char *path)
 int file_download(int sock, char *path)
 {
 	int fd = 0;
+	ssize_t len = 0;
 	off_t all_len = 0;
-	size_t data_size = 0;
 	off_t file_size = 0;
 	char buf[BUF_SIZE] = {0, };
 	char *file_name = NULL;
@@ -308,6 +298,7 @@ int file_download(int sock, char *path)
 
 	// 사이즈 받기
 	if ((file_size = recv_off_t(sock)) == 0) {
+		err_print("파일 정보를 읽어오는 데 실패함");
 		return -1;
 	}
 	printf("... file size : %ld\n", file_size);
@@ -334,51 +325,29 @@ int file_download(int sock, char *path)
 	SAFE_FREE(file_name);
 	SAFE_FREE(file_path);
 
-	puts("... 전송 시작 신호 수신");
-	// 파일 전송 시작 신호 수신
-	if (recv_stat(sock) != STAT_START) {
-		err_print("전송 시작 신호 수신 오류");
-		return -1;
-	}
-	puts("... 전송 시작 신호 수신 완료");
-	
-
-	puts("... 정상 수신 신호 전송");
-	// 정상 수신 신호 전송
-	if (send_data(sock, 0, NULL, STAT_OK) == SEND_ERR) {
-		err_print("정상 수신 신호 전송 오류");
-		return -1;
-	}
-	puts("... 정상 수신 신호 전송 완료");
-
-	puts("... 파일 다운로드 시작");
+	puts("... Downloading file");
 	// 파일 다운로드 시작
-	while (1) {
-		if (recv_data(sock, buf) == -1) {
-			err_print("데이터 수신 오류");
-			return -1;
-		}
-		data_size = get_packet_size(buf);
-
-		if (write(fd, (buf + OFFSET_DATA), data_size) < 0) {
+	while ((len = recv(sock, buf, BUF_SIZE, 0)) > 0) {
+		if (write(fd, buf, len) < 0) {
 			err_print("파일 쓰기 작업 중 오류");
-			return -1;
+			continue;
 		}
-
-		all_len += data_size;
-		if (all_len == file_size) {
+		all_len += len;
+		if (all_len >= file_size) {
+			if (all_len > file_size) {
+				err_print("데이터 수신 오류 의심");
+			}
 			break;
 		}
 	}
-	puts("... 파일 다운로드 완료");
+	printf("... %ld of %ld\n", all_len, file_size);
 
-	// 전송 완료 신호 수신
-	puts("... 파일 전송 완료 신호 수신");
-	if (recv_stat(sock) != STAT_END) {
+	// 전송 완료 신호 전송
+	if (send_data(sock, 0, NULL, STAT_OK) != SEND_OK) {
 		err_print("파일 전송 완료 신호 수신 오류");
 		return -1;
 	}
-	puts("... 파일 전송 완료 신호 수신 완료");
+	puts("... File download complete");
 
 	// 파일을 닫는다.
 	close(fd);
