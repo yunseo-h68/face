@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -229,9 +230,13 @@ int file_upload(int sock, char *path)
 	int fd = 0;
 	ssize_t len = 0;
 	size_t data_size = 0;
+	off_t file_size = 0;
 	char buf[BUF_SIZE] = {0,};
 	struct stat file_stat;
-
+	struct timeval start_time;
+	struct timeval end_time;
+	double work_time = 0;
+	
 	if (sock <= 0 || path == NULL) {
 		return -1;
 	}
@@ -249,8 +254,9 @@ int file_upload(int sock, char *path)
 	
 	// 사이즈 전송
 	data_size = sizeof(off_t);
-	printf("... file size : %ld\n", file_stat.st_size);
-	if (send_data(sock, data_size, &file_stat.st_size, STAT_OK) == SEND_ERR) {
+	file_size = file_stat.st_size;
+	printf("... file size : %ld\n", file_size);
+	if (send_data(sock, data_size, &file_size, STAT_OK) == SEND_ERR) {
 		return -1;
 	}
 
@@ -261,8 +267,10 @@ int file_upload(int sock, char *path)
 		return -1;
 	}
 
-	puts("... Uploading file");
 	// 전송 시작
+	puts("... Uploading file");
+	// 시작 시간 기록
+	gettimeofday(&start_time, NULL);
 	while ((len = read(fd, buf, BUF_SIZE)) > 0) {
 		if (send(sock, buf, len, 0) < 0) {
 			err_print("파일 전송 중 오류");
@@ -273,6 +281,22 @@ int file_upload(int sock, char *path)
 	// 정상 수신 여부 수신
 	if (recv_stat(sock) != STAT_OK) {
 		return -1;
+	}
+	// 완료 시간 기록
+	gettimeofday(&end_time, NULL);
+
+	// 작업 수행 시간 계산 후 출력
+	work_time = (double)(end_time.tv_sec)
+			+ (double)(end_time.tv_usec)/1000000.0
+			- (double)(start_time.tv_sec)
+			- (double)(start_time.tv_usec)/1000000.0;
+	printf("... Time Spent : %g s\n", work_time);
+	if (((double)(file_size/1024.0f/1024.0f)/work_time) > 0) {
+		printf("... %g mb/s\n", (double)(file_size/1024.0f/1024.0f)/work_time);
+	} else if (((double)(file_size/1024.0f)/work_time) > 0) {
+		printf("... %g kb/s\n", (double)(file_size/1024.0f)/work_time);
+	} else {
+		printf("... %lf b/s\n", (double)file_size/work_time);
 	}
 	puts("File upload complete");
 
@@ -291,6 +315,9 @@ int file_download(int sock, char *path)
 	char buf[BUF_SIZE] = {0, };
 	char *file_name = NULL;
 	char *file_path = NULL;
+	struct timeval start_time;
+	struct timeval end_time;
+	double work_time = 0;
 
 	if (sock <= 0) {
 		return -1;
@@ -325,8 +352,10 @@ int file_download(int sock, char *path)
 	SAFE_FREE(file_name);
 	SAFE_FREE(file_path);
 
-	puts("... Downloading file");
 	// 파일 다운로드 시작
+	puts("... Downloading file");
+	// 시작 시간 기록
+	gettimeofday(&start_time, NULL);
 	while ((len = recv(sock, buf, BUF_SIZE, 0)) > 0) {
 		if (write(fd, buf, len) < 0) {
 			err_print("파일 쓰기 작업 중 오류");
@@ -340,13 +369,29 @@ int file_download(int sock, char *path)
 			break;
 		}
 	}
-	printf("... %ld of %ld\n", all_len, file_size);
 
 	// 전송 완료 신호 전송
 	if (send_data(sock, 0, NULL, STAT_OK) != SEND_OK) {
 		err_print("파일 전송 완료 신호 수신 오류");
 		return -1;
 	}
+	// 완료 시간 기록
+	gettimeofday(&end_time, NULL);
+
+	// 작업 수행 시간 계산 후 출력
+	work_time = (double)(end_time.tv_sec)
+			+ (double)(end_time.tv_usec)/1000000.0
+			- (double)(start_time.tv_sec)
+			- (double)(start_time.tv_usec)/1000000.0;
+	printf("... Time Spent : %g s\n", work_time);
+	if (((double)(file_size/1024.0f/1024.0f)/work_time) > 0) {
+		printf("... %g mb/s\n", (double)(file_size/1024.0f/1024.0f)/work_time);
+        } else if (((double)(file_size/1024.0f)/work_time) > 0) {
+                printf("... %g kb/s\n", (double)(file_size/1024.0f)/work_time);
+        } else {
+                printf("... %lf b/s\n", (double)file_size/work_time);
+        }
+
 	puts("... File download complete");
 
 	// 파일을 닫는다.

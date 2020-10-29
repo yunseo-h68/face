@@ -3,3 +3,5 @@ bin/
 client/
 server/
 src_backup*/
+test/
+*.img
