@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include "common.h"
 
 int process_cmd_ls(int sock);
 int process_cmd_cd(int sock, char **work_path);
-int send_command(int sock, struct request_command* req_cmd);
 
 int main(int argc, char* argv[])
 {
@@ -59,22 +60,20 @@ int main(int argc, char* argv[])
 		} else if (req_cmd->cmd == CMD_NONE) {
 			err_print("Command not found");
 			continue;
+		} else if (req_cmd->cmd == ARG_SIZE_OVER) {
+			sprintf(buf, "The maximum length of the argument is %d.", ARG_MAX_SIZE);
+			err_print(buf);
+			continue;
 		}
 
 		// 명령을 전송한다.
-		err_chk = send_command(sock, req_cmd);
-		if (err_chk != OK) {
-			if (err_chk == SOCK_CLOSED) {
-				puts("\n\033[0mClosed");
-				exit(0);
-			} else if(err_chk == ARG_SIZE_OVER) {
-				sprintf(buf, "The maximum length of the argument is %ld.", BUF_DATA_SIZE);
-				err_print(buf);
-				continue;
-			}else if (err_chk == SEND_ERR) {
-				SAFE_FREE(work_path);
-				err_panic("send_data() error");
-			}
+		if (send(sock, req_cmd, sizeof(struct request_command), 0) == -1) {
+			SAFE_FREE(work_path);
+			err_panic("send() error");
+		}
+		if (req_cmd->cmd == CMD_CLOSE) {
+			puts("\n\033[0mClosed");
+			exit(0);
 		}
 
 		// 명령을 처리한다.
@@ -232,52 +231,4 @@ int process_cmd_cd(int sock, char **work_path)
 	strcpy(*work_path, buf);
 	
 	return 0;
-}
-
-int send_command(int sock, struct request_command* req_cmd)
-{
-	int i = 0;
-	size_t data_size = 0;
-	
-	if (req_cmd == NULL) {
-		return ERR;
-	}
-
-	// 명령 전송
-	data_size = sizeof(req_cmd->cmd);
-	if (send_data(sock, data_size, &(req_cmd->cmd), STAT_OK) == SEND_ERR) {
-		return SEND_ERR;
-	}
-
-	// 만약 명령 코드가 CMD_CLOSE라면 소켓 종료
-	if (req_cmd->cmd == CMD_CLOSE) {
-		close(sock);
-		return SOCK_CLOSED;
-	}
-
-	// 인자의 개수를 전송한다.
-	data_size = sizeof(req_cmd->argc);
-	if (send_data(sock, data_size, &(req_cmd->argc), STAT_OK) == SEND_ERR) {
-		return SEND_ERR;
-	}
-	
-	// 인자 전송 신호
-	if (send_data(sock, 0, NULL, STAT_START) == SEND_ERR) {
-		return SEND_ERR;
-	}
-
-	// 인자들을 순서대로 전송한다.
-	for (i = 0; i < req_cmd->argc; i++) {
-		data_size = strlen(req_cmd->argv[i]) + 1;
-		if (send_data(sock, data_size, req_cmd->argv[i], STAT_DOING) == SEND_ERR) {
-			return SEND_ERR;
-		}
-	}
-
-	// 인자 전송 완료 신호
-	if (send_data(sock, 0, NULL, STAT_END) == SEND_ERR) {
-		return SEND_ERR;
-	}
-	
-	return OK;
 }

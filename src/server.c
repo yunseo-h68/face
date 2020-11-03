@@ -11,7 +11,6 @@
 int send_big_str(int sock, char *str);
 int process_cmd_cd(int sock, const char* base_path, struct request_command *req_cmd);
 int process_cmd_ls(int sock, struct request_command *req_cmd);
-struct request_command* recv_command(int sock);
 
 int main(int argc, char* argv[])
 {
@@ -23,7 +22,7 @@ int main(int argc, char* argv[])
 
 	socklen_t clnt_addr_size;
 	struct sockaddr_in clnt_addr;
-	struct request_command *req_cmd = NULL;
+	struct request_command *req_cmd = (struct request_command*)malloc(sizeof(struct request_command));
 
 	if (argc != 2) {
 		printf("Usage : %s <port>\n", argv[0]);
@@ -47,15 +46,12 @@ int main(int argc, char* argv[])
 	fputs("Connected to client\n\n", stdout);
 
 	while (1) {
-		// 명령 수신
-		req_cmd = recv_command(clnt_sock);
-		if (req_cmd == NULL) {
-			err_panic("recv_command() error");
-		} else if (req_cmd->cmd == CMD_CLOSE) {
-			fputs("\nDisconnected from client\n", stdout);
-			close(clnt_sock);
-			close(serv_sock);
-			break;
+		// 명령 수신 및 수신된 명령 정보 출력
+		if (recv(clnt_sock, req_cmd, sizeof(struct request_command), 0) == -1) {
+			err_panic("recv() error");
+		}
+		if (req_cmd->cmd == CMD_NONE) {
+			continue;
 		}
 		printf("Request : %s(%d)\n", cmd_to_str(req_cmd->cmd), req_cmd->cmd);
 		printf("Args(%d) : \n", req_cmd->argc);
@@ -65,6 +61,13 @@ int main(int argc, char* argv[])
 		}
 		fputs("\n", stdout);
 
+		// 만약 명령 타입이 CMD_CLOSE라면 클라이언트와의 연결 종료
+		if (req_cmd->cmd == CMD_CLOSE) {
+			fputs("\nDisconnected from client\n", stdout);
+			close(clnt_sock);
+			close(serv_sock);
+			break;
+		}
 
 		// 명령을 처리한다.
 		switch (req_cmd->cmd) {
@@ -112,7 +115,7 @@ int main(int argc, char* argv[])
 				err_panic("Not reachable");
 		}
 	}
-	free_request_command(req_cmd);
+	SAFE_FREE(req_cmd);
 	return 0;
 }
 
@@ -259,58 +262,4 @@ int send_big_str(int sock, char *str)
 		break;
 	}
 	return 0;
-}
-
-struct request_command* recv_command(int sock)
-{
-	int i = 0;
-	struct request_command *req_cmd = (struct request_command*)malloc(sizeof(struct request_command));
-	memset(req_cmd, 0, sizeof(struct request_command));
-	req_cmd->cmd = 0;
-	req_cmd->argc = 0;
-	req_cmd->argv = NULL;
-
-	// 명령 코드 수신
-	req_cmd->cmd = recv_int(sock);
-	if (req_cmd->cmd == 0) {
-		return NULL;
-	} else if (req_cmd->cmd == CMD_CLOSE) {
-		return req_cmd;
-	}
-
-	// 인자의 개수 수신
-	req_cmd->argc = recv_int(sock);
-	if (req_cmd->argc == -1) {
-		SAFE_FREE(req_cmd);
-		return NULL;
-	}
-
-	// request_command 동적할당 후 초기화
-	req_cmd->argv = (char**)malloc(sizeof(char*) * req_cmd->argc);
-	for (i = 0; i < req_cmd->argc; i++) {
-		req_cmd->argv[i] = NULL;
-	}
-
-	// 인자 전송 신호 수신
-	if (recv_stat(sock) != STAT_START) {
-		free_request_command(req_cmd);
-		return NULL;
-	}
-
-	// 인자 값 수신
-	for (i = 0; i < req_cmd->argc; i++) {
-		req_cmd->argv[i] = recv_str(sock);
-		if (req_cmd->argv[i] == NULL) {
-			free_request_command(req_cmd);
-			return NULL;
-		}
-	}
-
-	// 인자 전송 완료 신호 수신
-	if (recv_stat(sock) != STAT_END) {
-		free_request_command(req_cmd);
-		return NULL;
-	}
-
-	return req_cmd;
 }

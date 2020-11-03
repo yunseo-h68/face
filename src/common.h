@@ -27,6 +27,9 @@
 #define BUF_SIZE      4096
 #define BUF_DATA_SIZE (BUF_SIZE - OFFSET_DATA)
 
+#define ARG_MAX_SIZE  100
+#define ARG_MAX_COUNT 1024
+
 #define STAT_ERROR  0
 #define STAT_OK     1
 #define STAT_START  2
@@ -45,10 +48,9 @@
 struct request_command {
 	int cmd;
 	int argc;
-	char **argv;
+	char argv[ARG_MAX_COUNT][ARG_MAX_SIZE];
 };
 
-void free_request_command(struct request_command *req_cmd);
 struct request_command* new_request_command(char *str);
 
 int get_cmd(const char* str);

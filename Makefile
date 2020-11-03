@@ -3,7 +3,7 @@ CFLAGS = -W -Wall -g
 TARGET_SERVER = bin/server
 TARGET_CLIENT = bin/client
 RUN_IP = 127.0.0.1
-RUN_PORT = 10009
+RUN_PORT = 10010
 
 all: $(TARGET_SERVER) $(TARGET_CLIENT)
 

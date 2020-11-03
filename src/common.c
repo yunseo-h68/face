@@ -13,21 +13,6 @@
 
 #include "common.h"
 
-/* 동적할당된 request_command 구조체의 메모리를 해제한다. */
-void free_request_command(struct request_command *req_cmd)
-{
-	int i = 0;
-	if (req_cmd == NULL) {
-		return;
-	}
-	for (i = 0; i < req_cmd->argc; i++) {
-		SAFE_FREE(req_cmd->argv[i]);
-	}
-	SAFE_FREE(req_cmd->argv);
-	SAFE_FREE(req_cmd);
-}
-
-
 /* 문자열로 된 명령을 request_command 구조체로 변환한다. */
 struct request_command* new_request_command(char *str)
 {
@@ -45,8 +30,8 @@ struct request_command* new_request_command(char *str)
 
 	// 인자의 개수
 	temp_ptr = strtok(NULL, " ");
-	for (i = 0; temp_ptr != NULL; i++) {
-		if (temp_ptr != NULL && strlen(temp_ptr) + 1 > BUF_DATA_SIZE) {
+	for (i = 0; temp_ptr != NULL && i < ARG_MAX_COUNT; i++) {
+		if (temp_ptr != NULL && strlen(temp_ptr) + 1 > ARG_MAX_SIZE) {
 			// 인자의 길이가 너무 길 경우 오류
 			req_cmd->cmd = ARG_SIZE_OVER;
 			return req_cmd;
@@ -56,13 +41,11 @@ struct request_command* new_request_command(char *str)
 	req_cmd->argc = i;
 
 	// 인자 세팅
-	req_cmd->argv = (char **)malloc(sizeof(char *) * req_cmd->argc);
 	strncpy(buf, str, BUFSIZ);
 	temp_ptr = strtok(buf, " ");
 	temp_ptr = strtok(NULL, " ");
 	for (i = 0; temp_ptr != NULL; i++) {
 		data_size = strlen(temp_ptr) + 1;
-		req_cmd->argv[i] = (char *)malloc(data_size);
 		strncpy(req_cmd->argv[i], temp_ptr, data_size);
 		temp_ptr = strtok(NULL, " ");
 	}
