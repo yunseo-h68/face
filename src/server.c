@@ -10,7 +10,7 @@
 
 int send_big_str(int sock, char *str);
 int process_cmd_cd(int sock, const char* base_path, struct request_command *req_cmd);
-int process_cmd_ls(int sock);
+int process_cmd_ls(int sock, struct request_command *req_cmd);
 struct request_command* recv_command(int sock);
 
 int main(int argc, char* argv[])
@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case CMD_LS:
-				err_chk = process_cmd_ls(clnt_sock);
+				err_chk = process_cmd_ls(clnt_sock, req_cmd);
 				if (err_chk == SEND_ERR) {
 					err_panic("send() error");
 				}
@@ -161,41 +161,75 @@ int process_cmd_cd(int sock, const char* base_path, struct request_command *req_
 	return 0;
 }
 
-int process_cmd_ls(int sock)
+int process_cmd_ls(int sock, struct request_command *req_cmd)
 {
+	int i = 0;
+	int path_count = 0;
+	int has_option_a = 0;
 	char *directory_contents = NULL;
-
-	// ls 명령 수행 결과를 가져온다.
-	// 현재 디렉토리에서 -a 옵션을 적용한 상태로 결과를 가져온다.
-	directory_contents = cmd_ls(".", 1);
-
-	// 결과 전송 시작 신호 송신
-	if (send_data(sock, 0, NULL, STAT_START) != SEND_OK) {
-		SAFE_FREE(directory_contents);
-		return SEND_ERR;
+	char **path = NULL;
+	
+	if (req_cmd->argc > 0) {
+		// 인자가 한 개 이상이라면 옵션이 아닌 인자를 경로로 해서 탐색
+		path = (char **)malloc(sizeof(char*) * req_cmd->argc);
+		memset(path, 0, sizeof(char*) * req_cmd->argc);
 	}
 
-	// ls 명령 결과가 없으면(어떤 directory나 file도 없다면
-	// 결과 전송 완료 신호 송신
-	if (directory_contents == NULL) {
-		if (send_data(sock, 0, NULL, STAT_END) != SEND_OK) {
-			return SEND_ERR;
+	// 인자 중에서 옵션 및 경로 파싱
+	for (i = 0; i < req_cmd->argc; i++) {
+		// 옵션 파싱
+		if (req_cmd->argv[i][0] == '-') {
+			if (!strcmp(req_cmd->argv[i], "-a")) {
+				has_option_a = 1;
+			}
+		} else {
+			// 옵션이 아닌 인자는 경로
+			path[path_count] = req_cmd->argv[i];
+			path_count++;
 		}
 	}
 
-	// 결과 전송 시작	
-	if (send_big_str(sock, directory_contents) == SEND_ERR) {
+	// 경로가 지정되지 않으면 현재 경로로
+	if (path_count == 0 || path == NULL) {
+		SAFE_FREE(path);
+		path = (char **)malloc(sizeof(char*) * 1);
+		path[0] = ".";
+		path_count = 1;
+	}
+
+	// 결과 전송 시작 신호 송신
+	if (send_data(sock, 0, NULL, STAT_START) != SEND_OK) {
+		SAFE_FREE(path);
 		SAFE_FREE(directory_contents);
 		return SEND_ERR;
 	}
 
-	// 결과 전송 완료 신호 송신
-	if (send_data(sock, 0, NULL, STAT_END) != SEND_OK) {
-		SAFE_FREE(directory_contents);
-		return SEND_ERR;
+	// 모든 경로들에 대해서 탐색 후 결과를 전송
+	for (i = 0; i < path_count; i++) {
+		// ls 결과 가져오기
+		directory_contents = cmd_ls(path[i], has_option_a);
+
+		// ls 명령 결과가 없으면(어떤 directory나 file도 없다면
+		// 다음 경로에 대한 결과 탐색
+		if (directory_contents == NULL) {
+			continue;
+		}
+
+		// 결과 전송 시작	
+		if (send_big_str(sock, directory_contents) == SEND_ERR) {
+			SAFE_FREE(path);
+			SAFE_FREE(directory_contents);
+			return SEND_ERR;
+		}
 	}
 	SAFE_FREE(directory_contents);
-	return 0;
+	SAFE_FREE(path);
+	
+	// 결과 전송 완료 신호 송신
+	if (send_data(sock, 0, NULL, STAT_END) != SEND_OK) {
+		return SEND_ERR;
+	}
+	return OK;
 }
 
 int send_big_str(int sock, char *str)

@@ -132,9 +132,9 @@ int send_data(int sock, size_t size, void *data, int status)
 int recv_data(int sock, char *buf)
 {
 	if (recv(sock, buf, BUF_SIZE, 0) == -1 || buf[OFFSET_STAT] == STAT_ERROR) {
-		return -1;
+		return ERR;
 	}
-	return 0;
+	return OK;
 }
 
 /* off_t형 Data를 받는다. */
@@ -155,7 +155,7 @@ int recv_int(int sock)
 	int data = 0;
 	char buf[BUF_SIZE] = {0,};
 	if (recv_data(sock, buf) == -1) {
-		return -1;
+		return ERR;
 	}
 	memcpy(&data, (buf + OFFSET_DATA), sizeof(int));
 	return data;
@@ -166,7 +166,7 @@ char recv_char(int sock)
 {
 	char buf[BUF_SIZE] = {0, };
 	if (recv_data(sock, buf) == -1) {
-		return -1;
+		return ERR;
 	}
 	return buf[OFFSET_DATA];
 }
@@ -238,7 +238,7 @@ int file_upload(int sock, char *path)
 	double work_time = 0;
 	
 	if (sock <= 0 || path == NULL) {
-		return -1;
+		return ERR;
 	}
 
 	// 파일을 연다.
@@ -247,9 +247,10 @@ int file_upload(int sock, char *path)
 		// 만약 파일을 열어 파일 정보를 읽는 데 실패한다면
 		// 사이즈를 0으로 전송하고 종료
 		if (send_data(sock, data_size, 0, STAT_OK) == SEND_ERR) {
-			return -1;
+			return ERR;
 		}
-		return -1;
+		err_print("파일 정보를 읽어오는 데 실패함");
+		return ERR;
 	}
 	
 	// 사이즈 전송
@@ -257,14 +258,14 @@ int file_upload(int sock, char *path)
 	file_size = file_stat.st_size;
 	printf("... file size : %ld\n", file_size);
 	if (send_data(sock, data_size, &file_size, STAT_OK) == SEND_ERR) {
-		return -1;
+		return ERR;
 	}
 
 	// 파일 이름 전송
 	data_size = strlen(get_last_path(path)) + 1;
 	printf("... file_name : %s\n", get_last_path(path));
 	if (send_data(sock, data_size, get_last_path(path), STAT_OK) == SEND_ERR) {
-		return -1;
+		return ERR;
 	}
 
 	// 전송 시작
@@ -277,13 +278,13 @@ int file_upload(int sock, char *path)
 			break;
 		}
 	}
+	// 완료 시간 기록
+	gettimeofday(&end_time, NULL);
 
 	// 정상 수신 여부 수신
 	if (recv_stat(sock) != STAT_OK) {
-		return -1;
+		return ERR;
 	}
-	// 완료 시간 기록
-	gettimeofday(&end_time, NULL);
 
 	// 작업 수행 시간 계산 후 출력
 	work_time = (double)(end_time.tv_sec)
@@ -302,7 +303,7 @@ int file_upload(int sock, char *path)
 
 	// 파일을 닫는다.
 	close(fd);
-	return 0;
+	return OK;
 }
 
 /* 파일을 다운로드한다. */
@@ -320,20 +321,20 @@ int file_download(int sock, char *path)
 	double work_time = 0;
 
 	if (sock <= 0) {
-		return -1;
+		return ERR;
 	}
 
 	// 사이즈 받기
 	if ((file_size = recv_off_t(sock)) == 0) {
 		err_print("파일 정보를 읽어오는 데 실패함");
-		return -1;
+		return ERR;
 	}
 	printf("... file size : %ld\n", file_size);
 
 	// 파일 이름 받고 생성
 	if ((file_name = recv_str(sock)) == NULL) {
 		err_print("파일 이름 수신 오류");
-		return -1;
+		return ERR;
 	}
 	printf("... file name : %s\n", file_name);
 	if (path == NULL) {
@@ -347,7 +348,7 @@ int file_download(int sock, char *path)
 		err_print("파일 생성 오류");
 		SAFE_FREE(file_name);
 		SAFE_FREE(file_path);
-		return -1;
+		return ERR;
 	}
 	SAFE_FREE(file_name);
 	SAFE_FREE(file_path);
@@ -369,14 +370,14 @@ int file_download(int sock, char *path)
 			break;
 		}
 	}
+	// 완료 시간 기록
+	gettimeofday(&end_time, NULL);
 
 	// 전송 완료 신호 전송
 	if (send_data(sock, 0, NULL, STAT_OK) != SEND_OK) {
 		err_print("파일 전송 완료 신호 수신 오류");
-		return -1;
+		return ERR;
 	}
-	// 완료 시간 기록
-	gettimeofday(&end_time, NULL);
 
 	// 작업 수행 시간 계산 후 출력
 	work_time = (double)(end_time.tv_sec)
@@ -397,7 +398,7 @@ int file_download(int sock, char *path)
 	// 파일을 닫는다.
 	close(fd);
 	
-	return 0;
+	return OK;
 }
 
 /* 작업 경로를 변경한다. */
@@ -441,7 +442,7 @@ int cmd_cd(const char *base_path, const char *path, char **work_path, int is_adm
 	// 경로가 지정되면 해당 경로로 작업 경로 변경
 	if (chdir(real_path) == -1) {
 		SAFE_FREE(real_path);
-		return -1;
+		return ERR;
 	}
 
 	cwd = getcwd(NULL, BUFSIZ);
@@ -456,9 +457,9 @@ int cmd_cd(const char *base_path, const char *path, char **work_path, int is_adm
 		// work_path를 cwd로 설정
 		SAFE_FREE(*work_path);
 		*work_path = cwd;
-		return 0;
+		return OK;
 	}else if (strlen(base_path) == strlen(cwd)) {
-		return 0;
+		return OK;
 	}
 	// 현재 작업경로가 HOME보다 하위라면
 	// base_path를 ~로 치환하여 work_path를 설정
@@ -469,7 +470,7 @@ int cmd_cd(const char *base_path, const char *path, char **work_path, int is_adm
 	strcat(*work_path, end_of_base);
 	SAFE_FREE(cwd);
 	SAFE_FREE(real_path);
-	return 0;
+	return OK;
 }
 
 /* directory 내 파일/하위 directory 이름들을 공백으로 구분한 문자열 반환한다. */
@@ -573,7 +574,7 @@ int err_print(const char *message)
 	fputs("\033[1;31mERROR : \033[0m", stderr);
 	fputs(message, stderr);
 	fputs("\n", stdout);
-	return 0;
+	return OK;
 }
 
 /* 어떤 값이 특정 값일 경우, 에러 메시지를 출력하고 프로그램을 종료시킨다 */
