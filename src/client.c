@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
 	int sock = 0;
 	int err_chk = 0;
 	char c = 0;
-	char buf[BUF_DATA_SIZE] = {0,};
+	char buf[BUFSIZ] = {0,};
 	char *work_path = (char*)malloc(2);
 	size_t data_size = 0;
 	struct request_command* req_cmd = NULL;
@@ -45,8 +45,8 @@ int main(int argc, char* argv[])
 
 		// 명령을 입력 받는다.
 		fputs("$\033[0m ", stdout);
-		memset(buf, 0, BUF_DATA_SIZE);
-		for (i = 0; (c = getchar()) != '\n' && i < (int)BUF_DATA_SIZE; i++) {
+		memset(buf, 0, BUFSIZ);
+		for (i = 0; (c = getchar()) != '\n' && i < (int)BUFSIZ; i++) {
 			buf[i] = c;
 		}
 		buf[i] = '\0';

@@ -9,8 +9,14 @@
 #include "common.h"
 
 int send_big_str(int sock, char *str);
-int process_cmd_cd(int sock, const char* base_path, struct request_command *req_cmd);
+int process_cmd_get(int sock, struct request_command *req_cmd);
+int process_cmd_put(int sock, struct request_command *req_cmd);
+int process_cmd_mget(int sock, struct request_command *req_cmd);
+int process_cmd_mput(int sock, struct request_command *req_cmd);
+int process_cmd_cd(int sock, struct request_command *req_cmd);
 int process_cmd_ls(int sock, struct request_command *req_cmd);
+
+char base_path[BUFSIZ] = {0, };
 
 int main(int argc, char* argv[])
 {
@@ -18,11 +24,15 @@ int main(int argc, char* argv[])
 	int err_chk = 0;
 	int serv_sock = 0;
 	int clnt_sock = 0;
-	char base_path[BUFSIZ] = {0, };
 
 	socklen_t clnt_addr_size;
 	struct sockaddr_in clnt_addr;
 	struct request_command *req_cmd = (struct request_command*)malloc(sizeof(struct request_command));
+
+	// 명령 처리 함수들에 대한 함수 포인터 배열
+	PROCESS_CMD_FUNC cmd_functions[6] = {process_cmd_cd, process_cmd_ls, 
+		process_cmd_get, process_cmd_put, 
+		process_cmd_mget, process_cmd_mput};
 
 	if (argc != 2) {
 		printf("Usage : %s <port>\n", argv[0]);
@@ -70,56 +80,59 @@ int main(int argc, char* argv[])
 		}
 
 		// 명령을 처리한다.
-		switch (req_cmd->cmd) {
-			case CMD_CD:
-				err_chk = process_cmd_cd(clnt_sock, base_path, req_cmd);
-				if (err_chk == SEND_ERR) {
-					err_panic("send() error");
-				} else if (err_chk == -1) {
-					err_panic("failed to change directory");
-				}
-				break;
-			case CMD_LS:
-				err_chk = process_cmd_ls(clnt_sock, req_cmd);
-				if (err_chk == SEND_ERR) {
-					err_panic("send() error");
-				}
-				break;
-			case CMD_GET:
-				for (i = 0; i < req_cmd->argc; i++) {
-					file_upload(clnt_sock, req_cmd->argv[i]);
-				}
-				break;
-			case CMD_PUT:
-				for (i = 0; i < req_cmd->argc; i++) {
-					file_download(clnt_sock, "./");
-				}
-				break;
-			case CMD_MGET:
-				for (i = 0; i < req_cmd->argc; i++) {
-					// 파일 다운로드 여부 수신하였을 때 'y'일 때만 진행
-					if (recv_char(clnt_sock) == 'y') {
-						file_upload(clnt_sock, req_cmd->argv[i]);
-					}
-				}
-				break;
-			case CMD_MPUT:
-				for (i = 0; i < req_cmd->argc; i++) {
-					// 파일 업로드 여부 수신하였을 때 'y'일 때만 진행
-					if (recv_char(clnt_sock) == 'y') {
-						file_download(clnt_sock, "./");
-					}
-				}
-				break;
-			default:
-				err_panic("Not reachable");
+		err_chk = cmd_functions[req_cmd->cmd - CMD_START_NUM](clnt_sock, req_cmd);
+		if (err_chk == SEND_ERR) {
+			err_panic("send() error");
+		} else if (err_chk == ERR) {
+			err_print("명령 수행 실패");
 		}
 	}
 	SAFE_FREE(req_cmd);
 	return 0;
 }
 
-int process_cmd_cd(int sock, const char* base_path, struct request_command *req_cmd)
+int process_cmd_get(int sock, struct request_command *req_cmd)
+{
+	int i = 0;
+	for (i = 0; i < req_cmd->argc; i++) {
+		file_upload(sock, req_cmd->argv[i]);
+	}
+	return OK;
+}
+
+int process_cmd_put(int sock, struct request_command *req_cmd)
+{
+	int i = 0;
+	for (i = 0; i < req_cmd->argc; i++) {
+		file_download(sock, "./");
+	
+	}
+	return OK;
+}
+
+int process_cmd_mget(int sock, struct request_command *req_cmd)
+{
+	int i = 0;
+	for (i = 0; i < req_cmd->argc; i++) {
+		if (recv_char(sock) == 'y') {
+			file_upload(sock, req_cmd->argv[i]);
+		}
+	}
+	return OK;
+}
+
+int process_cmd_mput(int sock, struct request_command *req_cmd)
+{
+	int i = 0;
+	for (i = 0; i < req_cmd->argc; i++) {
+		if (recv_char(sock) == 'y') {
+			file_download(sock, "./");
+		}
+	}
+	return OK;
+}
+
+int process_cmd_cd(int sock, struct request_command *req_cmd)
 {
 	char *work_path = NULL;
 	
@@ -161,7 +174,7 @@ int process_cmd_cd(int sock, const char* base_path, struct request_command *req_
 	}
 
 	SAFE_FREE(work_path);
-	return 0;
+	return OK;
 }
 
 int process_cmd_ls(int sock, struct request_command *req_cmd)
@@ -238,18 +251,18 @@ int process_cmd_ls(int sock, struct request_command *req_cmd)
 int send_big_str(int sock, char *str)
 {
 	size_t data_size = 0;
-	char buf[BUF_DATA_SIZE] = {0, };
+	char buf[BUF_SIZE] = {0, };
 	char *remaining_str = str;
 	while (1) {
 		// 만약 buf의 크기보다 커서 한번에 보내지 못하면
 		// 잘라서 보낸다.
-		if (strlen(remaining_str) + 1 > BUF_DATA_SIZE - 1) {
-			strncpy(buf, remaining_str, BUF_DATA_SIZE - 1);
-			buf[BUF_DATA_SIZE - 1] = '\0';
-			if (send_data(sock, BUF_DATA_SIZE, buf, STAT_DOING) != SEND_OK) {
+		if (strlen(remaining_str) + 1 > BUF_SIZE - 1) {
+			strncpy(buf, remaining_str, BUF_SIZE - 1);
+			buf[BUF_SIZE - 1] = '\0';
+			if (send_data(sock, BUF_SIZE, buf, STAT_DOING) != SEND_OK) {
 				return SEND_ERR;
 			}
-			remaining_str += BUF_DATA_SIZE;
+			remaining_str += BUF_SIZE;
 			continue;
 		}
 		// 한번에 보낼 수 있으면 한번에 보내고 탈출
@@ -261,5 +274,5 @@ int send_big_str(int sock, char *str)
 		}
 		break;
 	}
-	return 0;
+	return OK;
 }

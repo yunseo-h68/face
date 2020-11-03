@@ -20,13 +20,7 @@
 #define START_ERR         -11
 #define CD_ERR            -12
 
-#define OFFSET_STAT 0
-#define OFFSET_SIZE 1
-#define OFFSET_DATA sizeof(size_t) + OFFSET_SIZE
-
 #define BUF_SIZE      4096
-#define BUF_DATA_SIZE (BUF_SIZE - OFFSET_DATA)
-
 #define ARG_MAX_SIZE  100
 #define ARG_MAX_COUNT 1024
 
@@ -36,14 +30,15 @@
 #define STAT_DOING  3
 #define STAT_END    4
 
-#define CMD_NONE  0
-#define CMD_CD    101
-#define CMD_LS    102
-#define CMD_GET   103
-#define CMD_PUT   104
-#define CMD_MGET  105
-#define CMD_MPUT  106
-#define CMD_CLOSE 107
+#define CMD_NONE      0
+#define CMD_START_NUM 100
+#define CMD_CD        CMD_START_NUM + 0
+#define CMD_LS        CMD_START_NUM + 1
+#define CMD_GET       CMD_START_NUM + 2
+#define CMD_PUT       CMD_START_NUM + 3
+#define CMD_MGET      CMD_START_NUM + 4
+#define CMD_MPUT      CMD_START_NUM + 5
+#define CMD_CLOSE     CMD_START_NUM + 6
 
 struct request_command {
 	int cmd;
@@ -56,6 +51,8 @@ struct packet {
 	size_t size;
 	char data[BUF_SIZE];
 };
+
+typedef int(*PROCESS_CMD_FUNC)(int, struct request_command*);
 
 struct request_command* new_request_command(char *str);
 
