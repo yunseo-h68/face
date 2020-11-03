@@ -166,8 +166,7 @@ int main(int argc, char* argv[])
 
 int process_cmd_ls(int sock)
 {
-	char data_status = 0;
-	char buf[BUF_SIZE] = {0, };
+	struct packet pack;
 
 	// 결과 전송 시작 신호 수신
 	if (recv_stat(sock) != STAT_START) {
@@ -176,20 +175,19 @@ int process_cmd_ls(int sock)
 
 	// 수행 결과 수신 후 출력
 	while (1) {
-		memset(buf, 0, BUF_SIZE);
-		if (recv_data(sock, buf) == -1) {
+		memset(&pack, 0, sizeof(struct packet));
+		if (recv_data(sock, &pack) == -1) {
 			return RECV_ERR;
 		}
-		data_status = get_packet_stat(buf);
-		if (data_status != STAT_DOING && data_status != STAT_END) {
+		if (pack.status != STAT_DOING && pack.status != STAT_END) {
 			return RECV_ERR;
 		}
-		if (data_status == STAT_END) {
-			// 전송 완료 신호가 수신되면 탈출
+		// 전송 완료 신호가 수신되면 탈출
+		if (pack.status == STAT_END) {
 			break;
 		}
 		// 수신한 값을 출력함
-		fputs((buf + OFFSET_DATA), stdout);
+		fputs(pack.data, stdout);
 	}
 	fputs("\n", stdout);
 
@@ -198,9 +196,8 @@ int process_cmd_ls(int sock)
 
 int process_cmd_cd(int sock, char **work_path)
 {
-	char data_status = 0;
 	char buf[BUFSIZ] = {0, };
-	char temp_buf[BUF_SIZE] = {0, };
+	struct packet pack;
 
 	// 결과 전송 시작 신호 수신
 	if (recv_stat(sock) != STAT_START) {
@@ -209,18 +206,18 @@ int process_cmd_cd(int sock, char **work_path)
 
 	// 작업 경로 수신
 	while(1) {
-		if (recv_data(sock, temp_buf) == -1) {
+		memset(&pack, 0, sizeof(struct packet));
+		if (recv_data(sock, &pack) == -1) {
 			return RECV_ERR;
 		}
-		data_status = get_packet_stat(temp_buf);
-		if (data_status != STAT_DOING && data_status != STAT_END) {
+		if (pack.status != STAT_DOING && pack.status != STAT_END) {
 			return RECV_ERR;
 		}
-		if (data_status == STAT_END) {
-			// 전송 완료 신호가 수신되면 탈출
+		// 전송 완료 신호가 수신되면 탈출
+		if (pack.status == STAT_END) {
 			break;
 		}
-		strcat(buf, (temp_buf + OFFSET_DATA));
+		strcat(buf, pack.data);
 	}
 	if (strlen(buf) == 0) {
 		return CD_ERR;

@@ -51,13 +51,19 @@ struct request_command {
 	char argv[ARG_MAX_COUNT][ARG_MAX_SIZE];
 };
 
+struct packet {
+	int status;
+	size_t size;
+	char data[BUF_SIZE];
+};
+
 struct request_command* new_request_command(char *str);
 
 int get_cmd(const char* str);
 const char* cmd_to_str(int cmd);
 
 int send_data(int sock, size_t size, void *data, int status);
-int recv_data(int sock, char *buf);
+int recv_data(int sock, struct packet *pack);
 
 off_t recv_off_t(int sock);
 int recv_int(int sock);

@@ -94,27 +94,28 @@ const char* cmd_to_str(int cmd)
 /* Data를 전송한다. */
 int send_data(int sock, size_t size, void *data, int status)
 {
-	char buf[BUF_SIZE] = {0,};
+	struct packet pack;
 
-	if (size > BUF_DATA_SIZE) {
+	if (size > BUF_SIZE) {
 		return BUF_SIZE_OVER;
 	}
 
-	buf[OFFSET_STAT] = status;
-	memcpy((buf + OFFSET_SIZE), &size, sizeof(size_t));
+	pack.status = status;
+	pack.size = size;
+
 	if (data != NULL) {
-		memcpy((buf + OFFSET_DATA), data, size);
+		memcpy(pack.data, data, size);
 	}
-	if (send(sock, buf, BUF_SIZE, 0) == -1) {
+	if (send(sock, &pack, sizeof(struct packet), 0) == -1) {
 		return SEND_ERR;
 	}
 	return SEND_OK;
 }
 
 /* Data를 받는다. */
-int recv_data(int sock, char *buf)
+int recv_data(int sock, struct packet* pack)
 {
-	if (recv(sock, buf, BUF_SIZE, 0) == -1 || buf[OFFSET_STAT] == STAT_ERROR) {
+	if (recv(sock, pack, sizeof(struct packet), 0) == -1 || pack->status == STAT_ERROR) {
 		return ERR;
 	}
 	return OK;
@@ -124,11 +125,11 @@ int recv_data(int sock, char *buf)
 off_t recv_off_t(int sock)
 {
 	off_t data = 0;
-	char buf[BUF_SIZE] = {0,};
-	if (recv_data(sock, buf) == -1) {
+	struct packet pack;
+	if (recv_data(sock, &pack) == -1) {
 		return 0;
 	}
-	memcpy(&data, (buf + OFFSET_DATA), sizeof(off_t));
+	memcpy(&data, pack.data, sizeof(off_t));
 	return data;
 }
 
@@ -136,61 +137,45 @@ off_t recv_off_t(int sock)
 int recv_int(int sock)
 {
 	int data = 0;
-	char buf[BUF_SIZE] = {0,};
-	if (recv_data(sock, buf) == -1) {
+	struct packet pack;
+	if (recv_data(sock, &pack) == -1) {
 		return ERR;
 	}
-	memcpy(&data, (buf + OFFSET_DATA), sizeof(int));
+	memcpy(&data, pack.data, sizeof(int));
 	return data;
 }
 
 /* char형 Data를 받는다. */
 char recv_char(int sock)
 {
-	char buf[BUF_SIZE] = {0, };
-	if (recv_data(sock, buf) == -1) {
+	struct packet pack;
+	if (recv_data(sock, &pack) == -1) {
 		return ERR;
 	}
-	return buf[OFFSET_DATA];
+	return pack.data[0];
 }
 
 /* 문자열 Data를 받는다. */
 char* recv_str(int sock)
 {
-	size_t size = 0;
 	char *data = NULL;
-	char buf[BUF_SIZE] = {0,};
-	if (recv_data(sock, buf) == -1) {
+	struct packet pack;
+	if (recv_data(sock, &pack) == -1) {
 		return NULL;
 	}
-	size = get_packet_size(buf);
-	data = (char*)malloc(size);
-	memcpy(data, (buf + OFFSET_DATA), size);
+	data = (char*)malloc(pack.size);
+	memcpy(data, pack.data, pack.size);
 	return data;
 }
 
 /* 상태값만 가져온다. */
 char recv_stat(int sock)
 {
-	char buf[BUF_SIZE] = {0, };
-	if (recv_data(sock, buf) == -1) {
+	struct packet pack;
+	if (recv_data(sock, &pack) == -1) {
 		return STAT_ERROR;
 	}
-	return get_packet_stat(buf);
-}
-
-/* 패킷에서 status 값을 가져온다. */
-char get_packet_stat(char *packet)
-{
-	return packet[OFFSET_STAT];
-}
-
-/* 패킷에서 데이터의 길이 값을 가져온다. */
-size_t get_packet_size(char *packet)
-{
-	size_t size = 0;
-	memcpy(&size, (packet + OFFSET_SIZE), sizeof(size_t));
-	return size;
+	return pack.status;
 }
 
 /* 경로에서 최하위 경로의 시작 주소를 반환한다.  */
