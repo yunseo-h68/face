@@ -19,16 +19,13 @@ struct request_command* new_request_command(char *str)
 	int i = 0;
 	char *temp_ptr = NULL;
 	char *command = NULL;
-	char buf[BUFSIZ] = {0,};
-	size_t data_size = 0;
 	struct request_command* req_cmd = (struct request_command*)malloc(sizeof(struct request_command));
-	strncpy(buf, str, BUFSIZ);
 
 	// 명령 코드
-	command = strtok(buf, " ");
+	command = strtok(str, " ");
 	req_cmd->cmd = get_cmd(command);
 
-	// 인자의 개수
+	// 인자의 파싱
 	temp_ptr = strtok(NULL, " ");
 	for (i = 0; temp_ptr != NULL && i < ARG_MAX_COUNT; i++) {
 		if (temp_ptr != NULL && strlen(temp_ptr) + 1 > ARG_MAX_SIZE) {
@@ -36,19 +33,10 @@ struct request_command* new_request_command(char *str)
 			req_cmd->cmd = ARG_SIZE_OVER;
 			return req_cmd;
 		}
+		strncpy(req_cmd->argv[i], temp_ptr, strlen(temp_ptr) + 1);
 		temp_ptr = strtok(NULL, " ");
 	}
 	req_cmd->argc = i;
-
-	// 인자 세팅
-	strncpy(buf, str, BUFSIZ);
-	temp_ptr = strtok(buf, " ");
-	temp_ptr = strtok(NULL, " ");
-	for (i = 0; temp_ptr != NULL; i++) {
-		data_size = strlen(temp_ptr) + 1;
-		strncpy(req_cmd->argv[i], temp_ptr, data_size);
-		temp_ptr = strtok(NULL, " ");
-	}
 
 	// 결과 반환
 	return req_cmd;
